@@ -60,8 +60,8 @@ class Fetcher:
     def get_domains(self):
         self.cur.execute('SELECT title, id FROM websites')
         for x in self.cur.fetchall():
-            if re.match(self.reg, x['title']):
-                self.domains.append({'id': x['id'], 'title': x['title'].split('/').pop().split('www.').pop()})
+            if re.match(self.reg, x['title'].split('/').pop().split('www.').pop()):
+                self.domains.append({'id': x['id'], 'title': x['title']})
 
     async def fetch(self, session, url):
         async with session.get(url) as response:
@@ -71,35 +71,36 @@ class Fetcher:
         tasks = []
         url = 'https://api.similarweb.com/SimilarWebAddon/{}/all?format=json'
         async with ClientSession() as session:
-            for domain in self.domains[:10]:
+            for domain in self.domains:
                 task = asyncio.ensure_future(self.fetch(session, url.format(domain['title'])))
-                print(url.format(domain['title']))
+                # print(url.format(domain['title']))
                 tasks.append(task)
             self.responses = await asyncio.gather(*tasks)
             self.responses = list(filter(lambda x: x != 'null', self.responses))
             self.responses = list(map(json.loads, self.responses))
+            print(self.responses)
 
     def process_responses(self):
         for res, domain in zip(self.responses, self.domains):
             geos = []
-        for _ in range(3):
+            for _ in range(3):
+                try:
+                    geo = str(res['TopCountryShares'][_]['Country'])
+                    geos.append(COUNTRY_CODE_MAPPING.get(geo, None))
+                except (KeyError, IndexError, TypeError):
+                    logging.error('Error handing website\'s geo\'s {}'.format(domain['title']))
+                    break
             try:
-                geo = str(res['TopCountryShares'][_]['Country'])
-                geos.append(COUNTRY_CODE_MAPPING.get(geo, None))
-            except (KeyError, IndexError, TypeError):
-                logging.error('Error handing website\'s geo\'s {}'.format(domain['title']))
-                break
-        try:
-            self.data.append({'id': domain['id'],
-                              'domain': domain['title'],
-                              'category': res['Category'],
-                              'geos': [geo for geo in geos if geo],
-                              'language': 'qeq',
-                              'traffic': 'organic' if res['TrafficSources']['Paid Referrals'] < res['TrafficSources'][
-                                  'Referrals'] else 'Non-organic'})
-            logging.info('Fetched website {}.'.format(domain['title']))
-        except TypeError:
-            logging.error('Exeception handling {} website.'.format(domain['title']))
+                self.data.append({'id': domain['id'],
+                                  'domain': domain['title'],
+                                  'category': res['Category'],
+                                  'geos': [geo for geo in geos if geo],
+                                  'language': 'qeq',
+                                  'traffic': 'organic' if res['TrafficSources']['Paid Referrals'] < res['TrafficSources'][
+                                      'Referrals'] else 'Non-organic'})
+                logging.info('Fetched website {}.'.format(domain['title']))
+            except TypeError:
+                logging.error('Exeception handling {} website.'.format(domain['title']))
 
     def fetch_domains(self):
         eta = len(self.domains)
@@ -150,12 +151,12 @@ class Fetcher:
 def main():
     a = Fetcher(host='localhost', user='root', password='imonomy', db='mydashboard')
     a.get_domains()
-    a.fetch_domains()
-    # loop = asyncio.get_event_loop()
-    # future = asyncio.ensure_future(a.run())
-    # loop.run_until_complete(future=future)
-    # loop.close()
-    # a.process_responses()
+    #a.fetch_domains()
+    loop = asyncio.get_event_loop()
+    future = asyncio.ensure_future(a.run())
+    loop.run_until_complete(future=future)
+    loop.close()
+    a.process_responses()
     a.make_csv()
     a.cur.close()
     a.connect.close()
