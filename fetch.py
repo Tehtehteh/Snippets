@@ -1,5 +1,4 @@
 import pymysql
-import aiohttp
 from aiohttp import ClientSession
 import asyncio
 import csv
@@ -8,7 +7,7 @@ import re
 import logging
 import json
 
-logging.basicConfig(filename='/home/teh/my.log', level=logging.INFO)
+logging.basicConfig(filename='my.log', level=logging.INFO)
 logger = logging.getLogger(__name__)
 COUNTRY_CODE_MAPPING = {'4': 'AF', '8': 'AL', '12': 'DZ', '16': 'AS', '20': 'AD', '24': 'AO', '660': 'AI', '10': 'AQ',
                         '28': 'AG', '32': 'AR', '51': 'AM', '533': 'AW', '36': 'AU', '40': 'AT', '31': 'AZ', '44': 'BS',
@@ -56,12 +55,13 @@ class Fetcher:
             '^((?:http(?:s)?\:\/\/)?[a-zA-Z0-9_-]+(?:.[a-zA-Z0-9_-]+)*\.[a-zA-Z]{2,4}(?:\/[a-zA-Z0-9_]+)*(?:\/[a-zA-Z0-9_]+.[a-zA-Z]{2,4}(?:\?[a-zA-Z0-9_]+\=[a-zA-Z0-9_]+)?)?(?:\&[a-zA-Z0-9_]+\=[a-zA-Z0-9_]+)*)$')
         self.data = []
         self.responses = []
+        self.lastdata = []
 
     def get_domains(self):
         self.cur.execute('SELECT title, id FROM websites')
         for x in self.cur.fetchall():
             if re.match(self.reg, x['title'].split('/').pop().split('www.').pop()):
-                self.domains.append({'id': x['id'], 'title': x['title']})
+                self.domains.append({'id': x['id'], 'title': x['title'].split('/').pop().split('www.').pop()})
 
     async def fetch(self, session, url):
         async with session.get(url) as response:
@@ -73,22 +73,23 @@ class Fetcher:
         async with ClientSession() as session:
             for domain in self.domains:
                 task = asyncio.ensure_future(self.fetch(session, url.format(domain['title'])))
-                # print(url.format(domain['title']))
                 tasks.append(task)
             self.responses = await asyncio.gather(*tasks)
             self.responses = list(filter(lambda x: x != 'null', self.responses))
-            self.responses = list(map(json.loads, self.responses))
-            print(self.responses)
+        for res in self.responses:
+            try:
+                self.lastdata.append(json.loads(res))
+            except json.decoder.JSONDecodeError:
+                print('Error processing {}'.format(res))
 
     def process_responses(self):
-        for res, domain in zip(self.responses, self.domains):
+        for res, domain in zip(self.lastdata, self.domains):
             geos = []
             for _ in range(3):
                 try:
                     geo = str(res['TopCountryShares'][_]['Country'])
                     geos.append(COUNTRY_CODE_MAPPING.get(geo, None))
                 except (KeyError, IndexError, TypeError):
-                    logging.error('Error handing website\'s geo\'s {}'.format(domain['title']))
                     break
             try:
                 self.data.append({'id': domain['id'],
@@ -122,10 +123,10 @@ class Fetcher:
                     try:
                         self.data.append({'id': domain['id'],
                                           'domain': domain['title'],
-                                      'category': res['Category'],
-                                      'geos': [geo for geo in geos if geo],
-                                      'language': 'qeq',
-                                      'traffic': 'organic' if res['TrafficSources']['Paid Referrals'] < res['TrafficSources']['Referrals'] else 'Non-organic'})
+                                          'category': res['Category'],
+                                          'geos': [geo for geo in geos if geo],
+                                          'language': 'qeq',
+                                          'traffic': 'organic' if res['TrafficSources']['Paid Referrals'] < res['TrafficSources']['Referrals'] else 'Non-organic'})
                         logging.info('Fetched website {}.'.format(domain['title']))
                     except TypeError:
                         logging.error('Exeception handling {} website.'.format(domain['title']))
@@ -135,7 +136,7 @@ class Fetcher:
                 logging.error('Error in requests.')
 
     def make_csv(self):
-        with open('/home/teh/domains.csv', 'w+') as handler:
+        with open('domains.csv', 'w+') as handler:
             csv_handler = csv.DictWriter(handler, fieldnames=['Website ID', 'Website Domain', 'Language', 'Main Geos', 'Traffic Source',
                                                        'Category'])
             csv_handler.writeheader()
@@ -151,7 +152,10 @@ class Fetcher:
 def main():
     a = Fetcher(host='localhost', user='root', password='imonomy', db='mydashboard')
     a.get_domains()
-    #a.fetch_domains()
+    # with open('domains.txt', 'w') as handler:
+    #     for domain in a.domains:
+    #         handler.write(domain['title']+'\n')
+    # a.fetch_domains()
     loop = asyncio.get_event_loop()
     future = asyncio.ensure_future(a.run())
     loop.run_until_complete(future=future)
