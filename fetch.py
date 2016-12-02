@@ -125,7 +125,6 @@ class Fetcher:
                                           'domain': domain['title'],
                                           'category': res['Category'],
                                           'geos': [geo for geo in geos if geo],
-                                          'language': 'qeq',
                                           'traffic': 'organic' if res['TrafficSources']['Paid Referrals'] < res['TrafficSources']['Referrals'] else 'Non-organic'})
                         logging.info('Fetched website {}.'.format(domain['title']))
                     except TypeError:
@@ -137,20 +136,19 @@ class Fetcher:
 
     def make_csv(self):
         with open('domains.csv', 'w+') as handler:
-            csv_handler = csv.DictWriter(handler, fieldnames=['Website ID', 'Website Domain', 'Language', 'Main Geos', 'Traffic Source',
+            csv_handler = csv.DictWriter(handler, fieldnames=['Website ID', 'Website Domain', 'Main Geos', 'Traffic Source',
                                                        'Category'])
             csv_handler.writeheader()
             logging.info('CREATING CSV FILE.')
             for domain in self.data:
                 logging.info('Inserting domain {} into csv file.'.format(domain['domain']))
                 csv_handler.writerow({'Website ID': domain['id'], 'Website Domain': domain['domain'],
-                                      'Language': domain['language'],
                                       'Main Geos': ','.join(geo for geo in domain['geos']),
                                       'Traffic Source': domain['traffic'], 'Category': domain['category']})
 
 
 def main():
-    a = Fetcher(host='localhost', user='root', password='imonomy', db='mydashboard')
+    a = Fetcher()
     a.get_domains()
     # with open('domains.txt', 'w') as handler:
     #     for domain in a.domains:
