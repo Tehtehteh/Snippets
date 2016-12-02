@@ -96,7 +96,6 @@ class Fetcher:
                                   'domain': domain['title'],
                                   'category': res['Category'],
                                   'geos': [geo for geo in geos if geo],
-                                  'language': 'qeq',
                                   'traffic': 'organic' if res['TrafficSources']['Paid Referrals'] < res['TrafficSources'][
                                       'Referrals'] else 'Non-organic'})
                 logging.info('Fetched website {}.'.format(domain['title']))
