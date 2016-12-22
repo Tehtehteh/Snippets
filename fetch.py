@@ -88,8 +88,17 @@ class Fetcher:
             for _ in range(3):
                 try:
                     geo = str(res['TopCountryShares'][_]['Country'])
-                    geos.append(COUNTRY_CODE_MAPPING.get(geo, None))
+                    if all([x['Value'] < 0.10 for x in res['TopCountryShares']]):
+                        geos.append(COUNTRY_CODE_MAPPING.get(res['TopCountryShares'][0]['Country']))
+                        break
+                    if res['TopCountryShares'][_]['Value'] > 0.10:
+                        geos.append(COUNTRY_CODE_MAPPING.get(geo, None))
                 except (KeyError, IndexError, TypeError):
+                    if not len(geos):
+                        try:
+                            geos.append(COUNTRY_CODE_MAPPING.get(res['TopCountryShares'][0]['Country']))
+                        except:
+                            pass
                     break
             try:
                 self.data.append({'id': domain['id'],
@@ -147,7 +156,7 @@ class Fetcher:
 
 
 def main():
-    a = Fetcher()
+    a = Fetcher(host='localhost', user='root', db='mydashboard', password='imonomy')
     a.get_domains()
     # with open('domains.txt', 'w') as handler:
     #     for domain in a.domains:
